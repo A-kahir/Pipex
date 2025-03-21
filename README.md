@@ -52,7 +52,3 @@ This will:
 - This implementation only handles two commands.
 - Paths are extracted from the \`PATH\` environment variable.
 - The program ensures resource management (closing pipes, files).
-
-## Author
-Made with ❤️ by [Your Name]
-EOF
