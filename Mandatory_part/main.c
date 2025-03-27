@@ -12,25 +12,8 @@
 
 #include "ft_pipex.h"
 
-static int	check_commands(char **argv)
-{
-	if ((argv[2][0] == '.' || argv[2][0] == '/'
-		|| (argv[2][0] == '.' && argv[2][1] == '/') || (argv[3][0] == '.' ||
-			argv[3][0] == '/' || (argv[3][0] == '.' && argv[3][0] == '/'))))
-	{
-		if (argv[3][0] == '.' || argv[3][0] == '/'
-			|| (argv[3][0] == '.' && argv[3][0] == '/'))
-		{
-			return (perror("no such file or directory"), exit(1), 0);
-		}
-		return (perror("no such file or directory"), 0);
-	}
-	return (1);
-}
-
 static	void	open_files(char **argv, int *infile, int *outfile)
 {
-	check_commands(argv);
 	*infile = open(argv[1], O_RDONLY);
 	if (*infile < 0)
 	{
@@ -48,43 +31,50 @@ static	void	open_files(char **argv, int *infile, int *outfile)
 	}
 }
 
-static	void	ex_fir_cmd(int infile, int pipe_fd[2], char **argv, char **env)
+static void	execute_first_cmd(int infile, int pp_fd[2], char **argv, char **env)
 {
 	char	**cmd;
 
-	close(pipe_fd[0]);
+	close(pp_fd[0]);
 	cmd = ft_get_path(argv[2], env);
 	if (!cmd || !cmd[0])
 	{
 		perror("Command not found");
 		exit(1);
 	}
-	dup2(infile, 0);
+	if (dup2(infile, STDIN_FILENO) == -1)
+	{
+		perror("dup2 input failed");
+		exit(1);
+	}
+	if (dup2(pp_fd[1], STDOUT_FILENO) == -1)
+	{
+		perror("dup2 pipe failed");
+		exit(1);
+	}
+	close(pp_fd[1]);
 	close(infile);
-	dup2(pipe_fd[1], 1);
-	close(pipe_fd[1]);
 	execve(cmd[0], cmd, env);
-	perror("Command execution failed");
+	perror("Execve failed");
 	exit(1);
 }
 
-static	void	ex_sec_cmd(int outfile, int pipe_fd[2], char **argv, char **env)
+static void	execute_second_cmd(int outf, int pp_fd[2], char **argv, char **env)
 {
 	char	**cmd;
 
-	close(pipe_fd[1]);
+	close(pp_fd[1]);
 	cmd = ft_get_path(argv[3], env);
 	if (!cmd || !cmd[0])
-	{
-		perror("Command not found");
-		exit(1);
-	}
-	dup2(pipe_fd[0], 0);
-	close(pipe_fd[0]);
-	dup2(outfile, 1);
-	close(outfile);
+		(perror("Command not found"), exit(1));
+	if (dup2(pp_fd[0], STDIN_FILENO) == -1)
+		(perror("dup2 pipe failed"), exit(1));
+	if (dup2(outf, STDOUT_FILENO) == -1)
+		(perror("dup2 output failed"), exit(1));
+	close(pp_fd[0]);
+	close(outf);
 	execve(cmd[0], cmd, env);
-	perror("Command execution failed");
+	perror("Execve failed");
 	exit(1);
 }
 
@@ -97,22 +87,20 @@ int	main(int argc, char **argv, char **env)
 	int		pipe_fd[2];
 
 	if (argc != 5)
-		return (perror("Usage: infile cmd1 cmd2 outfile"), exit(1), 0);
+		(write(2, "Usage: ./pipex infile cmd1 cmd2 outfile\n", 40), exit(1));
 	if (pipe(pipe_fd) == -1)
-		return (perror("Pipe creation failed"), exit(1), 0);
+		(perror("Pipe creation failed"), exit(1));
 	open_files(argv, &infile, &outfile);
 	pid1 = fork();
-	if (pid1 < 0)
-		return (perror("Fork failed"), exit(1), 1);
+	if (pid1 == -1)
+		exit(1);
 	else if (pid1 == 0)
-		ex_fir_cmd(infile, pipe_fd, argv, env);
+		execute_first_cmd(infile, pipe_fd, argv, env);
 	pid2 = fork();
-	if (pid2 < 0)
-		return (perror("Fork failed"), exit(1), 0);
+	if (pid2 == -1)
+		exit(1);
 	else if (pid2 == 0)
-		ex_sec_cmd(outfile, pipe_fd, argv, env);
-	close(pipe_fd[0]);
-	close(pipe_fd[1]);
-	close(infile);
-	return (close(outfile), waitpid(pid1, NULL, 0), waitpid(pid2, NULL, 0), 0);
+		execute_second_cmd(outfile, pipe_fd, argv, env);
+	ft_close_fd(&infile, &outfile, pipe_fd);
+	return (waitpid(pid1, NULL, 0), waitpid(pid2, NULL, 0), 0);
 }

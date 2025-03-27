@@ -30,5 +30,7 @@ void	free_split(char **split);
 char	*ft_strdup(char *s1);
 char	*ft_strjoin_free(char *s1, char *s2);
 void	*ft_memcpy(void *dst, const void *src, size_t n);
+void	ft_close_fd(int *infile, int *outfile, int pipe_fd[2]);
+char	*ft_strchr(const char *s, int c);
 
 #endif
